@@ -33,7 +33,7 @@ type Printer interface {
 }
 
 var GetPrinter = got.Using(func(c *got.Container) Printer {
-	return &CapsPrinter{}
+    return &CapsPrinter{}
 })
 
 // CapsPrinter is an implementation of Printer interface
@@ -59,9 +59,9 @@ type Office struct {
 }
 
 var GetOffice = got.Using(func(c *got.Container) *Office {
-	return &Office{
-		Printer: GetPrinter.From(c),
-	}
+    return &Office{
+        Printer: GetPrinter.From(c),
+    }
 })
 ```
 
@@ -104,10 +104,10 @@ type Office struct {
 }
 
 var GetOffice = got.Using(func(c *got.Container) *Office {
-	return &Office{
+    return &Office{
         // a new printer is created each time
-		Printer: GetPrinter.New(c),
-	}
+        Printer: GetPrinter.New(c),
+    }
 })
 ```
 
@@ -122,7 +122,7 @@ package main
 import "github.com/eriicafes/got"
 
 var GetBadOffice = got.Using2(func(c *got.Container) (*Office, error) {
-	return nil, fmt.Errorf("failed to create office")
+    return nil, fmt.Errorf("failed to create office")
 })
 ```
 
