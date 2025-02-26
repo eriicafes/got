@@ -59,3 +59,25 @@ func TestUsing2(t *testing.T) {
 		t.Error("error reference not equal")
 	}
 }
+
+type MockPrinter struct{}
+
+var GetMockPrinter = got.Using(func(c *got.Container) Printer {
+	return &MockPrinter{}
+})
+
+func (*MockPrinter) Print(s string) string {
+	return fmt.Sprintf("mocked %s", s)
+}
+
+func TestMock(t *testing.T) {
+	mc := got.New()
+	got.Mock(mc, GetPrinter, GetMockPrinter.New(mc))
+	office := GetOffice.From(mc)
+
+	got := office.Printer.Print("hello")
+	expected := "mocked hello"
+	if got != expected {
+		t.Errorf("invalid printer expected: %q got %q", expected, got)
+	}
+}

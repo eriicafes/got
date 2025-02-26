@@ -84,3 +84,13 @@ type from2[T, U any] struct {
 	v1 T
 	v2 U
 }
+
+// Mock modifies the container cache to return a mocked instance for the constructor.
+func Mock[T any](c *Container, ct Constructor[T], v T) {
+	c.cache[ct] = v
+}
+
+// Mock2 modifies the container cache to return a mocked instance for the constructor.
+func Mock2[T, U any](c *Container, ct Constructor2[T, U], v1 T, v2 U) {
+	c.cache[ct] = from2[T, U]{v1, v2}
+}

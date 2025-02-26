@@ -126,6 +126,35 @@ var GetBadOffice = got.Using2(func(c *got.Container) (*Office, error) {
 })
 ```
 
+## Mocking
+
+Mock a constructor using `got.Mock` or `got.Mock2`.
+
+```go
+// main.go
+package main
+
+import "github.com/eriicafes/got"
+
+type MockPrinter struct{}
+
+var GetMockPrinter = got.Using(func(c *got.Container) Printer {
+    return &MockPrinter{}
+})
+
+func (*MockPrinter) Print(s string) string {
+    return fmt.Sprintf("mocked %s", s)
+}
+
+func main() {
+    mc := got.New()
+    got.Mock(mc, GetPrinter, GetMockBadPrinter.New(mc))
+    office := GetOffice.From(mc)
+
+    office.Printer.Print()
+}
+```
+
 ## Circular dependency errors
 
 Go prevents you from creating circular dependencies as long as you maintain the convention and use global vars as constructors.
