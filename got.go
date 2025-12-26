@@ -1,12 +1,19 @@
 package got
 
+import "sync"
+
+// Container is a dependency injection container that caches constructor results.
+// It is safe for concurrent use by multiple goroutines.
+//
+// The zero Container is empty and ready for use.
 type Container struct {
-	cache map[any]any
+	cache sync.Map
 }
 
 // New creates a new Container.
+// While the zero value of Container is ready to use, New() is provided for API clarity.
 func New() *Container {
-	return &Container{cache: make(map[any]any)}
+	return &Container{}
 }
 
 // Constructor is implemented by any type that has
@@ -34,11 +41,14 @@ func Using[T any](fn func(*Container) T) Constructor[T] {
 // The constructor's New method is called the first time and the return value is cached.
 // Future calls will return the cached value.
 func From[T any](c *Container, ct Constructor[T]) T {
-	if v, ok := c.cache[ct]; ok {
+	if v, ok := c.cache.Load(ct); ok {
 		return v.(T)
 	}
 	v := ct.New(c)
-	c.cache[ct] = v
+	actual, loaded := c.cache.LoadOrStore(ct, v)
+	if loaded {
+		return actual.(T)
+	}
 	return v
 }
 
@@ -71,12 +81,17 @@ func Using2[T, U any](fn func(*Container) (T, U)) Constructor2[T, U] {
 // The constructor's New method is called the first time and the return values are cached.
 // Future calls will return the cached values.
 func From2[T, U any](c *Container, ct Constructor2[T, U]) (T, U) {
-	if v, ok := c.cache[ct]; ok {
+	if v, ok := c.cache.Load(ct); ok {
 		f2 := v.(from2[T, U])
 		return f2.v1, f2.v2
 	}
 	v1, v2 := ct.New(c)
-	c.cache[ct] = from2[T, U]{v1, v2}
+	val := from2[T, U]{v1, v2}
+	actual, loaded := c.cache.LoadOrStore(ct, val)
+	if loaded {
+		f2 := actual.(from2[T, U])
+		return f2.v1, f2.v2
+	}
 	return v1, v2
 }
 
@@ -87,10 +102,10 @@ type from2[T, U any] struct {
 
 // Mock modifies the container cache to return a mocked instance for the constructor.
 func Mock[T any](c *Container, ct Constructor[T], v T) {
-	c.cache[ct] = v
+	c.cache.Store(ct, v)
 }
 
 // Mock2 modifies the container cache to return a mocked instance for the constructor.
 func Mock2[T, U any](c *Container, ct Constructor2[T, U], v1 T, v2 U) {
-	c.cache[ct] = from2[T, U]{v1, v2}
+	c.cache.Store(ct, from2[T, U]{v1, v2})
 }
