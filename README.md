@@ -200,3 +200,5 @@ func main() {
 ## Circular dependency errors
 
 Go prevents you from creating circular dependencies as long as you maintain the convention and use global vars as constructors.
+
+Always declare constructors as top-level vars rather than assigning them lazily, otherwise circular dependencies can go undetected and deadlock.

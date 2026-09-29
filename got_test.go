@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/eriicafes/got"
 )
@@ -113,6 +114,67 @@ func TestClearErrors(t *testing.T) {
 
 	if cached, err := getRetryable.From(c); err != nil || cached != value {
 		t.Error("successful constructor result was not retained after ClearErrors")
+	}
+}
+
+func TestClearErrorsDoesNotWaitForConstructor(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	getRetryable := got.TryUsing(func(c *got.Container) (*Counter, error) {
+		close(started)
+		<-release
+		return nil, fmt.Errorf("temporary failure")
+	})
+	c := got.New()
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		_, _ = getRetryable.From(c)
+	}()
+	<-started
+
+	cleared := make(chan struct{})
+	go func() {
+		c.ClearErrors()
+		close(cleared)
+	}()
+
+	select {
+	case <-cleared:
+	case <-time.After(time.Second):
+		close(release)
+		<-finished
+		t.Fatal("ClearErrors waited for a constructor")
+	}
+
+	close(release)
+	<-finished
+}
+
+func TestConstructorPanicDoesNotPoisonCache(t *testing.T) {
+	var calls atomic.Int32
+	getRetryable := got.Using(func(c *got.Container) *Counter {
+		if calls.Add(1) == 1 {
+			panic("temporary failure")
+		}
+		return &Counter{}
+	})
+	c := got.New()
+
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Error("expected constructor panic")
+			}
+		}()
+		getRetryable.From(c)
+	}()
+
+	if value := getRetryable.From(c); value == nil {
+		t.Error("constructor did not retry after panic")
+	}
+	if calls.Load() != 2 {
+		t.Errorf("expected constructor to run twice, got %d calls", calls.Load())
 	}
 }
 

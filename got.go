@@ -3,6 +3,7 @@ package got
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 )
 
 // Container is a dependency injection container that caches constructor results.
@@ -67,15 +68,25 @@ func Using[T any](fn func(*Container) T) Constructor[T] {
 // The constructor's New method is called the first time and the return value is cached.
 // Future calls will return the cached value.
 func From[T any](c *Container, ct Constructor[T]) T {
-	if v, ok := c.cache.Load(ct); ok {
-		return v.(T)
+	if value, ok := c.cache.Load(ct); ok {
+		return value.(*cacheEntry[T]).get()
 	}
-	v := ct.New(c)
-	actual, loaded := c.cache.LoadOrStore(ct, v)
-	if loaded {
-		return actual.(T)
+
+	var entry *cacheEntry[T]
+	entry = newCacheEntry(func() (value T) {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				c.cache.CompareAndDelete(ct, entry)
+				panic(recovered)
+			}
+		}()
+		return ct.New(c)
+	})
+	actual, loaded := c.cache.LoadOrStore(ct, entry)
+	if !loaded {
+		return entry.get()
 	}
-	return v
+	return actual.(*cacheEntry[T]).get()
 }
 
 // Constructor2 is implemented by any type that has
@@ -112,18 +123,54 @@ func TryUsing[T any](fn func(*Container) (T, error)) Constructor2[T, error] {
 // The constructor's New method is called the first time and the return values are cached.
 // Future calls will return the cached values.
 func From2[T, U any](c *Container, ct Constructor2[T, U]) (T, U) {
-	if v, ok := c.cache.Load(ct); ok {
-		f2 := v.(from2[T, U])
+	if value, ok := c.cache.Load(ct); ok {
+		f2 := value.(*cacheEntry[from2[T, U]]).get()
 		return f2.v1, f2.v2
 	}
-	v1, v2 := ct.New(c)
-	val := newFrom2(v1, v2)
-	actual, loaded := c.cache.LoadOrStore(ct, val)
-	if loaded {
-		f2 := actual.(from2[T, U])
+
+	var entry *cacheEntry[from2[T, U]]
+	entry = newCacheEntry(func() (value from2[T, U]) {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				c.cache.CompareAndDelete(ct, entry)
+				panic(recovered)
+			}
+		}()
+		v1, v2 := ct.New(c)
+		return newFrom2(v1, v2)
+	})
+	actual, loaded := c.cache.LoadOrStore(ct, entry)
+	if !loaded {
+		f2 := entry.get()
 		return f2.v1, f2.v2
 	}
-	return v1, v2
+	f2 := actual.(*cacheEntry[from2[T, U]]).get()
+	return f2.v1, f2.v2
+}
+
+type cacheEntry[T any] struct {
+	get  func() T
+	done atomic.Bool
+}
+
+func newCacheEntry[T any](fn func() T) *cacheEntry[T] {
+	entry := &cacheEntry[T]{}
+	entry.get = sync.OnceValue(func() T {
+		defer entry.done.Store(true)
+		return fn()
+	})
+	return entry
+}
+
+func (entry *cacheEntry[T]) cachedError() (err error) {
+	if !entry.done.Load() {
+		return nil
+	}
+	defer func() { _ = recover() }()
+	if value, ok := any(entry.get()).(interface{ cachedError() error }); ok {
+		return value.cachedError()
+	}
+	return nil
 }
 
 type from2[T, U any] struct {
@@ -143,10 +190,11 @@ func (f from2[T, U]) cachedError() error {
 
 // Mock modifies the container cache to return a mocked instance for the constructor.
 func Mock[T any](c *Container, ct Constructor[T], v T) {
-	c.cache.Store(ct, v)
+	c.cache.Store(ct, newCacheEntry(func() T { return v }))
 }
 
 // Mock2 modifies the container cache to return a mocked instance for the constructor.
 func Mock2[T, U any](c *Container, ct Constructor2[T, U], v1 T, v2 U) {
-	c.cache.Store(ct, newFrom2(v1, v2))
+	value := newFrom2(v1, v2)
+	c.cache.Store(ct, newCacheEntry(func() from2[T, U] { return value }))
 }
