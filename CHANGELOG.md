@@ -1,5 +1,11 @@
 # got
 
+## 0.4.0
+
+### Minor Changes
+
+- 7f144df: Add container context and error constructors
+
 ## 0.3.0
 
 ### Minor Changes
