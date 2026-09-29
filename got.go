@@ -1,19 +1,30 @@
 package got
 
-import "sync"
+import (
+	"context"
+	"sync"
+)
 
 // Container is a dependency injection container that caches constructor results.
 // It is safe for concurrent use by multiple goroutines.
-//
-// The zero Container is empty and ready for use.
 type Container struct {
-	cache sync.Map
+	cache   sync.Map
+	context context.Context
 }
 
 // New creates a new Container.
-// While the zero value of Container is ready to use, New() is provided for API clarity.
 func New() *Container {
-	return &Container{}
+	return NewContext(context.Background())
+}
+
+// NewContext creates a new Container with context available to its constructors.
+func NewContext(context context.Context) *Container {
+	return &Container{context: context}
+}
+
+// Context returns the context associated with c.
+func (c *Container) Context() context.Context {
+	return c.context
 }
 
 // Constructor is implemented by any type that has

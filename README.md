@@ -88,6 +88,35 @@ func main() {
 }
 ```
 
+### Context
+
+Constructors can use a container's context while initializing cached dependencies.
+`got.New()` uses `context.Background()`. To provide a context explicitly, create the
+container with `got.NewContext(context)` and retrieve it in a constructor with
+`container.Context()`.
+
+```go
+// main.go
+package main
+
+import (
+    "context"
+
+    "github.com/eriicafes/got"
+)
+
+var GetClient = got.Using(func(container *got.Container) *Client {
+    return NewClient(container.Context())
+})
+
+func main() {
+    container := got.NewContext(context.Background())
+
+    client := GetClient.From(container)
+    _ = client
+}
+```
+
 ## Transient constructors
 Transient constructors create a new instance each time it is requested.
 

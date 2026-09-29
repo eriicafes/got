@@ -50,6 +50,28 @@ var GetCounter = got.Using(func(c *got.Container) *Counter {
 	return &Counter{count: 0}
 })
 
+func TestNewContext(t *testing.T) {
+	context := t.Context()
+	getContext := got.Using2(func(container *got.Container) (bool, error) {
+		return container.Context() == context, nil
+	})
+
+	c := got.NewContext(context)
+	usedContext, err := getContext.From(c)
+	if err != nil {
+		t.Fatalf("constructing context-dependent value: %v", err)
+	}
+	if !usedContext {
+		t.Error("constructor did not receive the container context")
+	}
+}
+
+func TestNewContextAllowsNilContext(t *testing.T) {
+	if got.NewContext(nil).Context() != nil {
+		t.Error("NewContext(nil) did not retain a nil context")
+	}
+}
+
 func TestUsing(t *testing.T) {
 	c := got.New()
 	office := GetOffice.From(c)
@@ -328,19 +350,10 @@ func TestConstructor2BothValuesCached(t *testing.T) {
 }
 
 func TestZeroValueContainer(t *testing.T) {
-	// Zero value should be ready to use
 	var c got.Container
 
-	result1 := GetCounter.From(&c)
-	result2 := GetCounter.From(&c)
-
-	// Should cache properly
-	if result1 != result2 {
-		t.Error("zero value container not caching properly")
-	}
-
-	if result1.count != 0 {
-		t.Errorf("expected count 0, got %d", result1.count)
+	if c.Context() != nil {
+		t.Error("zero-value container context is not nil")
 	}
 }
 
