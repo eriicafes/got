@@ -1,6 +1,7 @@
 package got_test
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -67,7 +68,8 @@ func TestNewContext(t *testing.T) {
 }
 
 func TestNewContextAllowsNilContext(t *testing.T) {
-	if got.NewContext(nil).Context() != nil {
+	var ctx context.Context
+	if got.NewContext(ctx).Context() != nil {
 		t.Error("NewContext(nil) did not retain a nil context")
 	}
 }
