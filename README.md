@@ -142,7 +142,7 @@ var GetOffice = got.Using(func(c *got.Container) *Office {
 
 ## Multiple return value constructors
 
-Constructors may return two values, for example an instance and an error. Use `got.Using2` to create such a constructor.
+Use `got.TryUsing` for constructors that return a value and an error.
 
 ```go
 // bad_office.go
@@ -150,10 +150,23 @@ package main
 
 import "github.com/eriicafes/got"
 
-var GetBadOffice = got.Using2(func(c *got.Container) (*Office, error) {
+var GetBadOffice = got.TryUsing(func(c *got.Container) (*Office, error) {
     return nil, fmt.Errorf("failed to create office")
 })
 ```
+
+Use `got.Using2` when a constructor returns any other pair of values.
+
+```go
+var GetHTTPAddress = got.Using2(func(c *got.Container) (string, int) {
+    return "127.0.0.1", 8080
+})
+```
+
+## Clearing cached constructors
+
+Call `container.Clear()` to remove every cached constructor result. Call
+`container.ClearErrors()` to remove only results whose second value is a non-nil error, allowing failed constructors to be retried.
 
 ## Mocking
 

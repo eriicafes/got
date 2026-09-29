@@ -22,9 +22,24 @@ func NewContext(context context.Context) *Container {
 	return &Container{context: context}
 }
 
-// Context returns the context associated with c.
-func (c *Container) Context() context.Context {
-	return c.context
+// Context returns the context associated with the container.
+func (container *Container) Context() context.Context {
+	return container.context
+}
+
+// Clear removes all cached constructor results.
+func (container *Container) Clear() {
+	container.cache.Clear()
+}
+
+// ClearErrors removes cached constructor results whose second value is a non-nil error.
+func (container *Container) ClearErrors() {
+	container.cache.Range(func(key, value any) bool {
+		if result, ok := value.(interface{ cachedError() error }); ok && result.cachedError() != nil {
+			container.cache.CompareAndDelete(key, value)
+		}
+		return true
+	})
 }
 
 // Constructor is implemented by any type that has
@@ -83,9 +98,14 @@ func (ct *constructor2[T, U]) From(c *Container) (T, U) { return From2(c, ct) }
 
 // Using2 creates a new Constructor2 from a function that accepts a container and returns two values.
 //
-// Use Using2 when a constructor returns multiple values for example an instance and an error.
+// Use Using2 when a constructor returns two values.
 func Using2[T, U any](fn func(*Container) (T, U)) Constructor2[T, U] {
 	return &constructor2[T, U]{fn}
+}
+
+// TryUsing creates a new Constructor2 from a function that returns a value and an error.
+func TryUsing[T any](fn func(*Container) (T, error)) Constructor2[T, error] {
+	return Using2(fn)
 }
 
 // From2 returns an instance of a constructor's value from the container.
@@ -97,7 +117,7 @@ func From2[T, U any](c *Container, ct Constructor2[T, U]) (T, U) {
 		return f2.v1, f2.v2
 	}
 	v1, v2 := ct.New(c)
-	val := from2[T, U]{v1, v2}
+	val := newFrom2(v1, v2)
 	actual, loaded := c.cache.LoadOrStore(ct, val)
 	if loaded {
 		f2 := actual.(from2[T, U])
@@ -107,8 +127,18 @@ func From2[T, U any](c *Container, ct Constructor2[T, U]) (T, U) {
 }
 
 type from2[T, U any] struct {
-	v1 T
-	v2 U
+	v1  T
+	v2  U
+	err error
+}
+
+func newFrom2[T, U any](v1 T, v2 U) from2[T, U] {
+	err, _ := any(v2).(error)
+	return from2[T, U]{v1: v1, v2: v2, err: err}
+}
+
+func (f from2[T, U]) cachedError() error {
+	return f.err
 }
 
 // Mock modifies the container cache to return a mocked instance for the constructor.
@@ -118,5 +148,5 @@ func Mock[T any](c *Container, ct Constructor[T], v T) {
 
 // Mock2 modifies the container cache to return a mocked instance for the constructor.
 func Mock2[T, U any](c *Container, ct Constructor2[T, U], v1 T, v2 U) {
-	c.cache.Store(ct, from2[T, U]{v1, v2})
+	c.cache.Store(ct, newFrom2(v1, v2))
 }

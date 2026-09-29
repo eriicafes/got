@@ -38,7 +38,7 @@ var GetOffice = got.Using(func(c *got.Container) *Office {
 	}
 })
 
-var GetBadOffice = got.Using2(func(c *got.Container) (*Office, error) {
+var GetBadOffice = got.TryUsing(func(c *got.Container) (*Office, error) {
 	return nil, fmt.Errorf("failed to create office")
 })
 
@@ -52,7 +52,7 @@ var GetCounter = got.Using(func(c *got.Container) *Counter {
 
 func TestNewContext(t *testing.T) {
 	context := t.Context()
-	getContext := got.Using2(func(container *got.Container) (bool, error) {
+	getContext := got.TryUsing(func(container *got.Container) (bool, error) {
 		return container.Context() == context, nil
 	})
 
@@ -69,6 +69,48 @@ func TestNewContext(t *testing.T) {
 func TestNewContextAllowsNilContext(t *testing.T) {
 	if got.NewContext(nil).Context() != nil {
 		t.Error("NewContext(nil) did not retain a nil context")
+	}
+}
+
+func TestClear(t *testing.T) {
+	c := got.New()
+	first := GetCounter.From(c)
+
+	c.Clear()
+	second := GetCounter.From(c)
+	if first == second {
+		t.Error("Clear did not remove cached constructor result")
+	}
+}
+
+func TestClearErrors(t *testing.T) {
+	var calls atomic.Int32
+	getRetryable := got.TryUsing(func(c *got.Container) (*Counter, error) {
+		if calls.Add(1) == 1 {
+			return nil, fmt.Errorf("temporary failure")
+		}
+		return &Counter{}, nil
+	})
+	c := got.New()
+
+	if _, err := getRetryable.From(c); err == nil {
+		t.Fatal("expected initial constructor error")
+	}
+
+	c.ClearErrors()
+	value, err := getRetryable.From(c)
+	if err != nil {
+		t.Fatalf("constructor error after clearing errors: %v", err)
+	}
+	if value == nil {
+		t.Fatal("expected constructor value after clearing errors")
+	}
+	if calls.Load() != 2 {
+		t.Errorf("expected constructor to run twice, got %d calls", calls.Load())
+	}
+
+	if cached, err := getRetryable.From(c); err != nil || cached != value {
+		t.Error("successful constructor result was not retained after ClearErrors")
 	}
 }
 
@@ -89,7 +131,7 @@ func TestUsing(t *testing.T) {
 	}
 }
 
-func TestUsing2(t *testing.T) {
+func TestTryUsing(t *testing.T) {
 	c := got.New()
 	office, err := GetBadOffice.From(c)
 	office2, err2 := got.From2(c, GetBadOffice)
