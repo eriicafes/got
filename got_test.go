@@ -208,6 +208,64 @@ func TestTryUsing(t *testing.T) {
 	}
 }
 
+func TestNewUsing(t *testing.T) {
+	var calls atomic.Int32
+	getCounter := got.NewUsing(func(c *got.Container) *Counter {
+		return &Counter{count: int(calls.Add(1))}
+	})
+	c := got.New()
+
+	first := getCounter.From(c)
+	second := getCounter.From(c)
+	third := got.From(c, getCounter)
+	if first == second || second == third {
+		t.Error("NewUsing cached a constructor result")
+	}
+	if calls.Load() != 3 {
+		t.Errorf("expected constructor to run three times, got %d calls", calls.Load())
+	}
+}
+
+func TestNewUsing2(t *testing.T) {
+	var calls atomic.Int32
+	getCounter := got.NewUsing2(func(c *got.Container) (*Counter, int) {
+		count := int(calls.Add(1))
+		return &Counter{count: count}, count
+	})
+	c := got.New()
+
+	first, firstCount := getCounter.From(c)
+	second, secondCount := getCounter.From(c)
+	third, thirdCount := got.From2(c, getCounter)
+	if first == second || second == third || firstCount == secondCount || secondCount == thirdCount {
+		t.Error("NewUsing2 cached constructor results")
+	}
+}
+
+func TestTryNewUsing(t *testing.T) {
+	var calls atomic.Int32
+	getCounter := got.TryNewUsing(func(c *got.Container) (*Counter, error) {
+		return &Counter{count: int(calls.Add(1))}, nil
+	})
+	c := got.New()
+
+	first, err := getCounter.From(c)
+	if err != nil {
+		t.Fatalf("first constructor call: %v", err)
+	}
+	second, err := getCounter.From(c)
+	if err != nil {
+		t.Fatalf("second constructor call: %v", err)
+	}
+	third, err := got.From2(c, getCounter)
+	if err != nil {
+		t.Fatalf("third constructor call: %v", err)
+	}
+	if first == second || second == third {
+		t.Error("TryNewUsing cached a constructor result")
+	}
+}
+
 func TestMockOverwritesCache(t *testing.T) {
 	c := got.New()
 

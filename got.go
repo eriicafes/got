@@ -53,21 +53,34 @@ type Constructor[T any] interface {
 	From(*Container) T
 }
 
-type constructor[T any] struct{ fn func(*Container) T }
+type constructor[T any] struct {
+	fn        func(*Container) T
+	transient bool
+}
 
 func (ct *constructor[T]) New(c *Container) T { return ct.fn(c) }
+
+func (ct *constructor[T]) Transient() bool { return ct.transient }
 
 func (ct *constructor[T]) From(c *Container) T { return From(c, ct) }
 
 // Using creates a new Constructor from a function that accepts a container and returns a value.
 func Using[T any](fn func(*Container) T) Constructor[T] {
-	return &constructor[T]{fn}
+	return &constructor[T]{fn: fn}
+}
+
+// NewUsing creates a new transient Constructor from a function that accepts a container and returns a value.
+func NewUsing[T any](fn func(*Container) T) Constructor[T] {
+	return &constructor[T]{fn: fn, transient: true}
 }
 
 // From returns an instance of a constructor's value from the container.
 // The constructor's New method is called the first time and the return value is cached.
 // Future calls will return the cached value.
 func From[T any](c *Container, ct Constructor[T]) T {
+	if transient, ok := ct.(interface{ Transient() bool }); ok && transient.Transient() {
+		return ct.New(c)
+	}
 	if value, ok := c.cache.Load(ct); ok {
 		return value.(*cacheEntry[T]).get()
 	}
@@ -99,11 +112,16 @@ type Constructor2[T, U any] interface {
 	From(*Container) (T, U)
 }
 
-type constructor2[T, U any] struct{ fn func(*Container) (T, U) }
+type constructor2[T, U any] struct {
+	fn        func(*Container) (T, U)
+	transient bool
+}
 
 func (ct *constructor2[T, U]) New(c *Container) (T, U) {
 	return ct.fn(c)
 }
+
+func (ct *constructor2[T, U]) Transient() bool { return ct.transient }
 
 func (ct *constructor2[T, U]) From(c *Container) (T, U) { return From2(c, ct) }
 
@@ -111,7 +129,12 @@ func (ct *constructor2[T, U]) From(c *Container) (T, U) { return From2(c, ct) }
 //
 // Use Using2 when a constructor returns two values.
 func Using2[T, U any](fn func(*Container) (T, U)) Constructor2[T, U] {
-	return &constructor2[T, U]{fn}
+	return &constructor2[T, U]{fn: fn}
+}
+
+// NewUsing2 creates a new transient Constructor2 from a function that accepts a container and returns two values.
+func NewUsing2[T, U any](fn func(*Container) (T, U)) Constructor2[T, U] {
+	return &constructor2[T, U]{fn: fn, transient: true}
 }
 
 // TryUsing creates a new Constructor2 from a function that returns a value and an error.
@@ -119,10 +142,18 @@ func TryUsing[T any](fn func(*Container) (T, error)) Constructor2[T, error] {
 	return Using2(fn)
 }
 
+// TryNewUsing creates a new transient Constructor2 from a function that returns a value and an error.
+func TryNewUsing[T any](fn func(*Container) (T, error)) Constructor2[T, error] {
+	return NewUsing2(fn)
+}
+
 // From2 returns an instance of a constructor's value from the container.
 // The constructor's New method is called the first time and the return values are cached.
 // Future calls will return the cached values.
 func From2[T, U any](c *Container, ct Constructor2[T, U]) (T, U) {
+	if transient, ok := ct.(interface{ Transient() bool }); ok && transient.Transient() {
+		return ct.New(c)
+	}
 	if value, ok := c.cache.Load(ct); ok {
 		f2 := value.(*cacheEntry[from2[T, U]]).get()
 		return f2.v1, f2.v2
@@ -188,12 +219,12 @@ func (f from2[T, U]) cachedError() error {
 	return f.err
 }
 
-// Mock modifies the container cache to return a mocked instance for the constructor.
+// Mock modifies the container cache to return v for the constructor.
 func Mock[T any](c *Container, ct Constructor[T], v T) {
 	c.cache.Store(ct, newCacheEntry(func() T { return v }))
 }
 
-// Mock2 modifies the container cache to return a mocked instance for the constructor.
+// Mock2 modifies the container cache to return v1 and v2 for the constructor.
 func Mock2[T, U any](c *Container, ct Constructor2[T, U], v1 T, v2 U) {
 	value := newFrom2(v1, v2)
 	c.cache.Store(ct, newCacheEntry(func() from2[T, U] { return value }))

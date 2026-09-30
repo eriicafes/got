@@ -120,7 +120,9 @@ func main() {
 ## Transient constructors
 Transient constructors create a new instance each time it is requested.
 
-If you want your constructor to act as a transient, use `GetXXX.New(container)` to opt out of caching its return value.
+Use `got.NewUsing` to create a transient constructor. Its `From` method does not cache
+the returned value. You can also call any constructor's `New` method directly to create
+a value without caching it.
 
 ```go
 // office.go
@@ -132,17 +134,22 @@ type Office struct {
     Printer Printer
 }
 
+var NewPrinter = got.NewUsing(func(c *got.Container) Printer {
+    return &CapsPrinter{}
+})
+
 var GetOffice = got.Using(func(c *got.Container) *Office {
     return &Office{
         // a new printer is created each time
-        Printer: GetPrinter.New(c),
+        Printer: NewPrinter.From(c),
     }
 })
 ```
 
 ## Multiple return value constructors
 
-Use `got.TryUsing` for constructors that return a value and an error.
+Use `got.TryUsing` for constructors that return a value and an error. Use
+`got.TryNewUsing` when the constructor should be transient.
 
 ```go
 // bad_office.go
@@ -155,7 +162,8 @@ var GetBadOffice = got.TryUsing(func(c *got.Container) (*Office, error) {
 })
 ```
 
-Use `got.Using2` when a constructor returns any other pair of values.
+Use `got.Using2` for other constructors that return two values. Use `got.NewUsing2`
+when the constructor should be transient.
 
 ```go
 var GetHTTPAddress = got.Using2(func(c *got.Container) (string, int) {
